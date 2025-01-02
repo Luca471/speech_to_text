@@ -3,8 +3,13 @@
 import torch
 from transformers import WhisperProcessor, WhisperForConditionalGeneration
 import streamlit as st
+import warnings
 
 from config import WHISPER_MODEL
+
+# Filter out specific warnings
+warnings.filterwarnings('ignore', category=SyntaxWarning)
+warnings.filterwarnings('ignore', message='.*Examining the path of torch.classes.*')
 
 @st.cache_resource
 def load_asr_model():
@@ -18,7 +23,13 @@ def load_asr_model():
         
         # Always download from Hugging Face - don't try local first
         processor = WhisperProcessor.from_pretrained(WHISPER_MODEL)
-        model = WhisperForConditionalGeneration.from_pretrained(WHISPER_MODEL).to(device)
+        model = WhisperForConditionalGeneration.from_pretrained(
+            WHISPER_MODEL,
+            # Add pad_token_id to avoid attention mask warning
+            pad_token_id=processor.tokenizer.pad_token_id,
+            # Use English as default language
+            forced_decoder_ids=processor.get_decoder_prompt_ids(language="en", task="transcribe")
+        ).to(device)
         
         return processor, model
     except Exception as e:

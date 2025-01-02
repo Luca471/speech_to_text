@@ -1,6 +1,7 @@
 """Transcription logic for the Speech-to-Text application."""
 
 import streamlit as st
+import torch
 from utils.audio_processor import prepare_chunk
 from config import CHUNK_LENGTH_MS
 
@@ -22,13 +23,27 @@ def process_chunk(chunk, processor, model):
             return ""
             
         # Process with Whisper
-        input_features = processor(float_samples, sampling_rate=16000, return_tensors="pt").input_features
-        input_features = input_features.to(next(model.parameters()).device)
+        inputs = processor(
+            float_samples, 
+            sampling_rate=16000, 
+            return_tensors="pt",
+            return_attention_mask=True  # Explicitly request attention mask
+        )
         
-        # Generate tokens
-        predicted_ids = model.generate(input_features)
+        # Move inputs to the same device as the model
+        inputs = {k: v.to(model.device) for k, v in inputs.items()}
+        
+        # Generate tokens with forced English
+        with torch.no_grad():
+            predicted_ids = model.generate(
+                **inputs,
+                max_length=256,
+                no_repeat_ngram_size=3,
+                num_beams=5
+            )
+        
+        # Decode the tokens
         transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True)
-        
         return transcription[0] if transcription else ""
         
     except Exception as e:
